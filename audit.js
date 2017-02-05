@@ -1,3 +1,21 @@
+TEST_CASES = [
+  {
+    name: "Straight script tags",
+    inject: "<script>alert('${id}')</script>",
+    assert: "<script>alert('${id}')</script>"
+  },
+  {
+    name: "Close a single quote",
+    inject: "'><script>alert('${id}')</script><span id='",
+    assert: "<script>alert('${id}')</script>"
+  },
+  {
+    name: "Close a double quote",
+    inject: "\"><script>alert('${id}')</script><span id=\"",
+    assert: "<script>alert('${id}')</script>"
+  }
+];
+
 /**
  * Get the current URL.
  *
@@ -12,7 +30,6 @@ function getCurrentTabUrl(callback) {
   chrome.tabs.query(queryInfo, function(tabs) {
     var tab = tabs[0];
     var url = tab.url;
-    console.assert(typeof url == 'string', 'tab.url should be a string');
     callback(url);
   });
 }
@@ -52,33 +69,39 @@ function updateUI(test) {
   var row = document.getElementById('test-' + test.id);
   if (row == null) {
     row = document.createElement("tr");
+    row.id = 'test-' + test.id;
     table.appendChild(row);
   }
-  row.id = 'test-' + test.id;
-  row.innerHTML = '<td>' + test.parameter + '</td><td>' + test.result + '</td>';
+  row.innerHTML = test.getResultRow();
+  row.addEventListener('click', function() {
+    chrome.tabs.create({ url: test.url });
+  });
 }
 
 /*
   Class to contain the test case
 */
 class Test {
-  constructor(id, baseUrl, parameter) {
+  constructor(id, baseUrl, parameter, testCase) {
     this.id = id;
     this.baseUrl = baseUrl;
     this.parameter = parameter;
-    this.testString = "<script>alert('" + id + "')</script>";
+    this.testString = testCase.inject.replace("${id}", id);
+    this.testAssertion = testCase.assert.replace("${id}", id);
+    this.name = testCase.name;
+    this.url =  baseUrl + "?" + encodeURIComponent(parameter)+ "=" + encodeURIComponent(this.testString);
     updateUI(this);
   }
-  getUrl() {
-    return this.baseUrl + "?" + encodeURIComponent(this.parameter)+ "=" + encodeURIComponent(this.testString);
+  getResultRow() {
+    return '<td>' + this.name + ' for ' + this.parameter + '</td><td>' + this.result + '</td>';
   }
   run() {
     var test = this;
     var xhr = new XMLHttpRequest();
-    xhr.open("GET", test.getUrl(), true);
+    xhr.open("GET", test.url, true);
     xhr.onreadystatechange = function() {
       if (xhr.readyState == 4) {
-        test.result = xhr.responseText.includes(test.testString);
+        test.result = xhr.responseText.includes(test.testAssertion);
         updateUI(test);
       }
     }
@@ -96,12 +119,12 @@ class Audit {
     this.urlParams = getURLParameters(url);
   }
   run() {
-    // Create a test case for each URL Parameter
-    var tests = [];
     var testId = 1;
     for (var urlParam in this.urlParams) {
-      new Test(testId, this.baseUrl, urlParam).run();
-      testId++;
+      for (var i in TEST_CASES) {
+        new Test(testId, this.baseUrl, urlParam, TEST_CASES[i]).run();
+        testId++;
+      }
     }
   }
 }
