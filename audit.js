@@ -27,7 +27,6 @@ function getCurrentTabUrl(callback) {
 function getURLParameters(url) {
   var urlParams = {};
   var a = url.split('?');
-  console.log(a);
   if (a.length < 2) {
     return urlParams;
   }
@@ -37,34 +36,81 @@ function getURLParameters(url) {
   search = /([^&=]+)=?([^&]*)/g,
   decode = function (s) { return decodeURIComponent(s.replace(pl, " ")); };
   while (match = search.exec(a[1])) {
-    urlParams[decode(match[1])] = decode(match[2]);
+    urlParams[decode(match[1])] = decode(match[2]) ;
   }
 
   return urlParams;
 }
 
 /**
- * Populate the UI witht eh URL Parameters
- *
- * @param {string} urlParams - the URL key-values
- */
-function populateParameters(urlParams) {
-  var parameters = document.getElementById('parameters')
-  for (var key in urlParams) {
-    var tr = document.createElement("tr");
-    tr.innerHTML = '<td>' + key + '</td><td>' + urlParams[key] + '</td>';
-    parameters.appendChild(tr);
+  * Add or update the test results in the UI
+  *
+  * @param {test} test - the test to update in the test results table
+  */
+function updateUI(test) {
+  var table = document.getElementById('tests');
+  var row = document.getElementById('test-' + test.id);
+  if (row == null) {
+    row = document.createElement("tr");
+    table.appendChild(row);
+  }
+  row.id = 'test-' + test.id;
+  row.innerHTML = '<td>' + test.parameter + '</td><td>' + test.result + '</td>';
+}
+
+/*
+  Class to contain the test case
+*/
+class Test {
+  constructor(id, baseUrl, parameter) {
+    this.id = id;
+    this.baseUrl = baseUrl;
+    this.parameter = parameter;
+    this.testString = "<script>alert('" + id + "')</script>";
+    updateUI(this);
+  }
+  getUrl() {
+    return this.baseUrl + "?" + encodeURIComponent(this.parameter)+ "=" + encodeURIComponent(this.testString);
+  }
+  run() {
+    var test = this;
+    var xhr = new XMLHttpRequest();
+    xhr.open("GET", test.getUrl(), true);
+    xhr.onreadystatechange = function() {
+      if (xhr.readyState == 4) {
+        test.result = xhr.responseText.includes(test.testString);
+        updateUI(test);
+      }
+    }
+    xhr.send();
   }
 }
 
 /*
-  Run the XSS audit:
-  1) Get the current tab URL
-  2) Show the existing URL parameters
+  Class to contain the XSS Audit
+*/
+class Audit {
+  constructor(url) {
+    this.url = url;
+    this.baseUrl = url.split('?')[0];
+    this.urlParams = getURLParameters(url);
+  }
+  run() {
+    // Create a test case for each URL Parameter
+    var tests = [];
+    var testId = 1;
+    for (var urlParam in this.urlParams) {
+      new Test(testId, this.baseUrl, urlParam).run();
+      testId++;
+    }
+  }
+}
+
+/*
+  Run the XSS audit
 */
 document.addEventListener('DOMContentLoaded', function() {
   getCurrentTabUrl(function(url) {
-    urlParams = getURLParameters(url);
-    populateParameters(urlParams);
+    new Audit(url).run();
   });
 });

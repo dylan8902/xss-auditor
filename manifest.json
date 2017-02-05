@@ -8,6 +8,8 @@
     "default_popup": "audit.html"
   },
   "permissions": [
-    "activeTab"
+    "activeTab",
+    "http://*/",
+    "https://*/"
   ]
 }
